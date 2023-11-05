@@ -1,0 +1,61 @@
+﻿@page "/login"
+@using System.Net.Http.Json;
+@inject NavigationManager NavManager
+
+<PageTitle>Login</PageTitle>
+
+<p>Enter your credentials:</p>
+
+<div>
+    <label for="username">Username:</label>
+    <input id="username" type="text" @bind="username" />
+</div>
+
+<div>
+    <label for="password">Password:</label>
+    <input id="password" type="password" @bind="password" />
+</div>
+
+<button @onclick="Authenticate">Login</button>
+
+@code {
+    private string? username;
+    private string? password;
+    private HttpClient? _httpClient;
+    protected HttpClient HttpClient =>
+        _httpClient ??= new HttpClient();
+
+    private async Task Authenticate()
+    {
+        try
+        {
+            var loginModel = new LoginModel
+            {
+                Username = username,
+                Password = password
+            };
+
+            var response = await HttpClient.PostAsJsonAsync("https://localhost:7027/api/user/authenticate", loginModel);
+            response.EnsureSuccessStatusCode();
+            var content = await response.Content.ReadFromJsonAsync<AuthResponse>();
+
+            NavManager.NavigateTo($"/room?token={content?.JwtToken}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
+        }
+    }
+
+    public class LoginModel
+    {
+        public string? Username { get; set; }
+        public string? Password { get; set; }
+    }
+
+    public class AuthResponse
+    {
+        public string? RefreshToken { get; set; }
+        public string? JwtToken { get; set; }
+    }
+}
