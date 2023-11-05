@@ -3,7 +3,7 @@
     public class MessageDto
 	{
         public int? RoomId { get; set; }
-        public string? Message { get; set; }
+        public string? Content { get; set; }
         public string? Username { get; set; }
     }
 }

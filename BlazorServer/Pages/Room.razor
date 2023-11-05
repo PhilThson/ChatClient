@@ -2,7 +2,9 @@
 @using Microsoft.AspNetCore.SignalR.Client
 @using BlazorServer.Data;
 @using Microsoft.AspNetCore.WebUtilities;
+@using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
 @inject NavigationManager NavManager
+@inject ProtectedSessionStorage ProtectedSessionStore
 @implements IAsyncDisposable
 
 <PageTitle>Room</PageTitle>
@@ -17,7 +19,7 @@
         Message: <input @bind="messageInput" />
     </label>
 </div>
-@*jeżeli nie ma podłączenia do huba to nie można wysłać formularza*@
+
 <button @onclick="Send" disabled="@(IsConnected == false)">Send</button>
 
 <hr />
@@ -38,30 +40,33 @@
 
     protected override async Task OnInitializedAsync()
     {
-        var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
+        var result = await ProtectedSessionStore.GetAsync<string>("jwtToken");
+        token = result.Success ? result.Value : "";
 
-        if (!QueryHelpers.ParseQuery(uri.Query).TryGetValue("token", out var tokenValue))
-            throw new Exception("Brak tokenu autoryzacyjnego");
+        if (string.IsNullOrEmpty(token))
+        {
+            await ProtectedSessionStore.SetAsync("warningMessage",
+                "Only authenticated users can use chat.");
 
-        token = tokenValue.First();
+            NavManager.NavigateTo("/login");
+
+            return;
+        }
 
         hubConnection = new HubConnectionBuilder()
-        // NavManager wie pod jakim linkiem jesteśmy więc poprawnie doda sciezke
-        //.WithUrl(NavManager.ToAbsoluteUri("/chathub"))
-        .WithUrl("https://localhost:7027/chathub", options =>
-        {
-            options.AccessTokenProvider = () => Task.FromResult(token);
-        })
-        .WithAutomaticReconnect()
-        .Build();
+            .WithUrl("https://localhost:7027/chathub", options =>
+            {
+                options.AccessTokenProvider = () => Task.FromResult(token);
+            })
+            .WithAutomaticReconnect()
+            .Build();
 
         hubConnection.On<MessageDto>("ReceiveMessage", (message) =>
         {
-            messages.Add($"{message.Username}: {message.Message}");
+            messages.Add($"{message.Username}: {message.Content}");
             InvokeAsync(StateHasChanged);
         });
 
-        //rozpoczecie polaczenia
         await hubConnection.StartAsync();
     }
 
@@ -72,9 +77,9 @@
             await hubConnection.SendAsync("SendMessage",
                 new MessageDto
                 {
-                    RoomId = 1,
+                    RoomId = 2003,
                     Username = userInput,
-                    Message = messageInput
+                    Content = messageInput
                 });
         }
     }
