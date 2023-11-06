@@ -1,58 +1,80 @@
 ﻿@page "/room"
 @using Microsoft.AspNetCore.SignalR.Client
 @using BlazorServer.Data;
-@using Microsoft.AspNetCore.WebUtilities;
 @using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
 @inject NavigationManager NavManager
 @inject ProtectedSessionStorage ProtectedSessionStore
+@inject TokenService TokenService
 @implements IAsyncDisposable
 
 <PageTitle>Room</PageTitle>
 
-<div class="form-group">
-    <label>
-        User: <input @bind="userInput" />
-    </label>
-</div>
-<div class="form-group">
-    <label>
-        Message: <input @bind="messageInput" />
-    </label>
-</div>
+@if (string.IsNullOrEmpty(token))
+{
+    <p>Loading...</p>
+}
+else
+{
+    <div class="container" style="max-width: 600px;">
+        <h3>Chat Room: Room ID 2003</h3>
+        <div class="message-list">
+            @foreach (string message in messages)
+            {
+                <div class="message @(message.StartsWith("System:") ? "italic" : "")">
+                    @if (message.StartsWith("System:"))
+                    {
+                        @message
+                    }
+                    else
+                    {
+                        <strong>@message.Substring(0, message.IndexOf(":") + 1)</strong>@message.Substring(message.IndexOf(":") + 1)
+                    }
+                </div>
+            }
+        </div>
 
-<button @onclick="Send" disabled="@(IsConnected == false)">Send</button>
-
-<hr />
-
-<ul>
-    @foreach (string message in messages)
-    {
-        <li>@message</li>
-    }
-</ul>
+        <div class="input-group">
+            <input class="form-control" @bind="messageInput" placeholder="Type your message..." />
+            <div class="input-group-append">
+                <button class="btn btn-primary"
+                        @onclick="Send"
+                        disabled="@(IsConnected == false)">
+                    Send
+                </button>
+            </div>
+        </div>
+    </div>
+}
 
 @code {
     private HubConnection? hubConnection;
     private List<string> messages = new();
-    private string? userInput;
+    private string? userEmail;
     private string? messageInput;
     private string? token;
+    private int unauthenticatedCounter = 0;
 
     protected override async Task OnInitializedAsync()
     {
         var result = await ProtectedSessionStore.GetAsync<string>("jwtToken");
         token = result.Success ? result.Value : "";
+        var userEmailResult = await ProtectedSessionStore.GetAsync<string>("userEmail");
+        userEmail = userEmailResult.Success ? userEmailResult.Value : "";
 
         if (string.IsNullOrEmpty(token))
         {
             await ProtectedSessionStore.SetAsync("warningMessage",
-                "Only authenticated users can use chat.");
-
+                "Only authenticated users can use chat");
             NavManager.NavigateTo("/login");
-
             return;
         }
 
+        ConfigureHubConnection();
+        await StartHubConnection();
+    }
+
+    private void ConfigureHubConnection()
+    {
         hubConnection = new HubConnectionBuilder()
             .WithUrl("https://localhost:7027/chathub", options =>
             {
@@ -66,25 +88,62 @@
             messages.Add($"{message.Username}: {message.Content}");
             InvokeAsync(StateHasChanged);
         });
+    }
 
-        await hubConnection.StartAsync();
+    private async Task StartHubConnection()
+    {
+        try
+        {
+            await hubConnection.StartAsync();
+        }
+        catch (HttpRequestException ex)
+        {
+            if (ex.Message.Contains("401"))
+            {
+                if(unauthenticatedCounter > 1)
+                {
+                    await ProtectedSessionStore.SetAsync("warningMessage",
+                        "There was a problem with connection to chat. Please log in again.");
+                    NavManager.NavigateTo("/login");
+                }
+                unauthenticatedCounter++;
+                await TokenService.RenewTokenAsync();
+                var renewedResult = await ProtectedSessionStore.GetAsync<string>("jwtToken");
+                token = renewedResult.Success ? renewedResult.Value : token;
+                ConfigureHubConnection();
+                await StartHubConnection();
+            }
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            if (hubConnection != null)
+            {
+                await hubConnection.StartAsync();
+            }
+        }
     }
 
     private async Task Send()
     {
-        if (hubConnection is not null)
+        if (hubConnection is not null && hubConnection.State == HubConnectionState.Connected)
         {
             await hubConnection.SendAsync("SendMessage",
                 new MessageDto
                 {
                     RoomId = 2003,
-                    Username = userInput,
+                    Username = userEmail,
                     Content = messageInput
                 });
+            messageInput = "";
         }
     }
 
     public bool IsConnected => hubConnection?.State == HubConnectionState.Connected;
+
 
     public async ValueTask DisposeAsync()
     {

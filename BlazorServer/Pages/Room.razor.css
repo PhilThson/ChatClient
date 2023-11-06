@@ -1,0 +1,17 @@
+﻿.italic {
+    font-style: italic;
+}
+
+.message-list {
+    max-height: 400px;
+    min-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #ccc;
+    padding: 10px;
+    border-radius: 5px;
+    background-color: #f7f7f7;
+}
+
+.message {
+    margin-bottom: 10px;
+}

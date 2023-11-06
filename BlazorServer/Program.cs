@@ -1,13 +1,15 @@
 ﻿using Microsoft.AspNetCore.ResponseCompression;
-using BlazorServer.Data;
 using BlazorServer.Hubs;
+using BlazorServer.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddRazorPages();
 builder.Services.AddServerSideBlazor();
-builder.Services.AddSingleton<WeatherForecastService>();
+
+builder.Services.AddHttpClient();
+builder.Services.AddScoped<TokenService>();
 
 builder.Services.AddCors(options =>
 {
@@ -24,9 +26,6 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddResponseCompression(opts =>
 {
-    // upewnienie sie ze nasz serwer moze przetwarzac pakiety z naglowkiem
-    // octet-stream
-    // i kompresowanie tych polaczen
     opts.MimeTypes = ResponseCompressionDefaults.MimeTypes.Concat(
         new[] { "application/octet-stream" });
 });
@@ -47,7 +46,6 @@ if (!app.Environment.IsDevelopment())
 //    c.AllowCredentials();
 //});
 
-//poniżej wykorzystanie domyślnego klienta
 app.UseCors();
 
 //app.UseHttpsRedirection();
@@ -56,11 +54,9 @@ app.UseStaticFiles();
 
 app.UseRouting();
 
-// blazor hub jest po czesci po stronie serwera a po czesci po stronie klienta
 app.MapBlazorHub();
 
 app.MapHub<ChatHub>("/chathub");
-app.MapHub<CounterHub>("/counterhub");
 
 app.MapFallbackToPage("/_Host");
 
