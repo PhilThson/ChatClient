@@ -1,9 +1,10 @@
 ﻿@page "/login"
-@using System.Net.Http.Json;
 @using BlazorServer.Data;
+@using BlazorServer.Helpers;
 @using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
+@inject AuthService AuthService
 @inject NavigationManager NavManager
-@inject ProtectedSessionStorage ProtectedSessionStore
+@inject ProtectedSessionStorage SessionStore
 
 <PageTitle>Login</PageTitle>
 
@@ -36,9 +37,6 @@
     private string email = "";
     private string password = "";
     private string warningMessage = "";
-    private HttpClient? _httpClient;
-    protected HttpClient HttpClient =>
-        _httpClient ??= new HttpClient();
 
     private async Task Authenticate()
     {
@@ -50,13 +48,7 @@
                 Password = password
             };
 
-            var response = await HttpClient.PostAsJsonAsync("https://localhost:7178/authenticate", loginModel);
-            response.EnsureSuccessStatusCode();
-            var content = await response.Content.ReadFromJsonAsync<AuthResponse>();
-
-            await ProtectedSessionStore.SetAsync("jwtToken", content?.JwtToken);
-            await ProtectedSessionStore.SetAsync("refreshToken", content?.RefreshToken);
-            await ProtectedSessionStore.SetAsync("userEmail", email);
+            await AuthService.Authenticate(loginModel);
 
             NavManager.NavigateTo($"/room");
         }
@@ -69,9 +61,9 @@
 
     protected override async Task OnInitializedAsync()
     {
-        var result = await ProtectedSessionStore.GetAsync<string>("warningMessage");
+        var result = await SessionStore.GetAsync<string>(ChatConstants.WarningMessageName);
         warningMessage = result.Success ? result.Value : "";
 
-        await ProtectedSessionStore.DeleteAsync("warningMessage");
+        await SessionStore.DeleteAsync(ChatConstants.WarningMessageName);
     }
 }

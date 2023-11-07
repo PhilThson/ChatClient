@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.ResponseCompression;
 using BlazorServer.Hubs;
 using BlazorServer.Data;
+using BlazorServer.Helpers;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -8,8 +9,27 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorPages();
 builder.Services.AddServerSideBlazor();
 
-builder.Services.AddHttpClient();
-builder.Services.AddScoped<TokenService>();
+builder.Services.AddHttpClient(ChatConstants.HttpAuthClient, config =>
+{
+    config.BaseAddress = new Uri(ChatConstants.AuthBaseUrl);
+
+    config.Timeout = TimeSpan.FromSeconds(30);
+    config.DefaultRequestHeaders.Clear();
+    config.DefaultRequestHeaders.Add("Accept", "application/json");
+});
+builder.Services.AddHttpClient(ChatConstants.HttpChatClient, config =>
+{
+    config.BaseAddress = new Uri(ChatConstants.ChatBaseUrl);
+
+    config.Timeout = TimeSpan.FromSeconds(30);
+    config.DefaultRequestHeaders.Clear();
+    config.DefaultRequestHeaders.Add("Accept", "application/json");
+})
+.AddHttpMessageHandler<HttpClientMiddleware>();
+
+builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<ChatService>();
+builder.Services.AddTransient<HttpClientMiddleware>();
 
 builder.Services.AddCors(options =>
 {
@@ -38,13 +58,6 @@ if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler("/Error");
     app.UseHsts();
 }
-//udana próba podłączenia zewnętrznego klienta:
-//app.UseCors(c =>
-//{
-//    c.AllowAnyHeader();
-//    c.SetIsOriginAllowed(s => s == "http://localhost:5000");
-//    c.AllowCredentials();
-//});
 
 app.UseCors();
 

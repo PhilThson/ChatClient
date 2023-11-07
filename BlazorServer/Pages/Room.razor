@@ -1,15 +1,17 @@
 ﻿@page "/room"
 @using Microsoft.AspNetCore.SignalR.Client
 @using BlazorServer.Data;
+@using BlazorServer.Helpers;
 @using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
 @inject NavigationManager NavManager
-@inject ProtectedSessionStorage ProtectedSessionStore
-@inject TokenService TokenService
+@inject ProtectedSessionStorage SessionStore
+@inject AuthService AuthService
+@inject ChatService ChatService
 @implements IAsyncDisposable
 
 <PageTitle>Room</PageTitle>
 
-@if (string.IsNullOrEmpty(token))
+@if (string.IsNullOrEmpty(jwt))
 {
     <p>Loading...</p>
 }
@@ -51,20 +53,39 @@ else
     private List<string> messages = new();
     private string? userEmail;
     private string? messageInput;
-    private string? token;
+    private string? jwt;
     private int unauthenticatedCounter = 0;
 
     protected override async Task OnInitializedAsync()
     {
-        var result = await ProtectedSessionStore.GetAsync<string>("jwtToken");
-        token = result.Success ? result.Value : "";
-        var userEmailResult = await ProtectedSessionStore.GetAsync<string>("userEmail");
+        var result = await SessionStore.GetAsync<string>(ChatConstants.JwtName);
+        jwt = result.Success ? result.Value : "";
+        var userEmailResult = await SessionStore.GetAsync<string>(ChatConstants.UserEmail);
         userEmail = userEmailResult.Success ? userEmailResult.Value : "";
 
-        if (string.IsNullOrEmpty(token))
+        if (string.IsNullOrEmpty(jwt))
         {
-            await ProtectedSessionStore.SetAsync("warningMessage",
+            await SessionStore.SetAsync(ChatConstants.WarningMessageName,
                 "Only authenticated users can use chat");
+
+            NavManager.NavigateTo("/login");
+            return;
+        }
+
+        try
+        {
+            var roomDto = await ChatService.JoinRoom(2003, jwt);
+            if (roomDto?.Messages?.Any() == true)
+            {
+                messages = roomDto.Messages
+                    .Select(m => $"User (id: {m.SenderId}): {m.Content}")
+                    .ToList();
+            }
+        }
+        catch(HttpRequestException ex)
+        {
+            await SessionStore.SetAsync(ChatConstants.WarningMessageName,
+                "There was a problem with connection to chat room. " + ex.Message);
             NavManager.NavigateTo("/login");
             return;
         }
@@ -78,7 +99,7 @@ else
         hubConnection = new HubConnectionBuilder()
             .WithUrl("https://localhost:7027/chathub", options =>
             {
-                options.AccessTokenProvider = () => Task.FromResult(token);
+                options.AccessTokenProvider = () => Task.FromResult(jwt);
             })
             .WithAutomaticReconnect()
             .Build();
@@ -100,16 +121,16 @@ else
         {
             if (ex.Message.Contains("401"))
             {
-                if(unauthenticatedCounter > 1)
+                if (unauthenticatedCounter > 1)
                 {
-                    await ProtectedSessionStore.SetAsync("warningMessage",
+                    await SessionStore.SetAsync(ChatConstants.WarningMessageName,
                         "There was a problem with connection to chat. Please log in again.");
                     NavManager.NavigateTo("/login");
                 }
                 unauthenticatedCounter++;
-                await TokenService.RenewTokenAsync();
-                var renewedResult = await ProtectedSessionStore.GetAsync<string>("jwtToken");
-                token = renewedResult.Success ? renewedResult.Value : token;
+                await AuthService.RenewTokenAsync();
+                var renewedResult = await SessionStore.GetAsync<string>(ChatConstants.JwtName);
+                jwt = renewedResult.Success ? renewedResult.Value : jwt;
                 ConfigureHubConnection();
                 await StartHubConnection();
             }
