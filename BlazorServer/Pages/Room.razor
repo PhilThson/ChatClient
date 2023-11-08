@@ -143,12 +143,9 @@ else
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
+        if (firstRender && hubConnection != null)
         {
-            if (hubConnection != null)
-            {
-                await hubConnection.StartAsync();
-            }
+            await hubConnection.StartAsync();
         }
     }
 

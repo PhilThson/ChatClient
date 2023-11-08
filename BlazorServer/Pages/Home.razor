@@ -1,0 +1,41 @@
+﻿@page "/"
+@using BlazorServer.Helpers;
+@using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
+@inject ProtectedSessionStorage SessionStore
+
+<PageTitle>Welcome</PageTitle>
+
+<div class="container">
+    <h1>Welcome to the Chat Application</h1>
+    <p>This is a place to chat with your friends and stay connected.</p>
+
+    @if (IsAuthenticated)
+    {
+        <p>You are currently logged in as: <stron>@UserEmail</stron></p>
+        <a href="/room" class="btn btn-primary">Enter Chat Room</a>
+    }
+    else
+    {
+        <p>Only authenticated users can enter the chat room.</p>
+        <a href="/login" class="btn btn-primary">Login</a>
+    }
+</div>
+
+@code {
+    private string? UserEmail = "";
+    private bool IsAuthenticated;
+    private bool isRendered = false;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !isRendered)
+        {
+            var result = await SessionStore.GetAsync<string>(ChatConstants.JwtName);
+            var userEmailResult = await SessionStore.GetAsync<string>(ChatConstants.UserEmail);
+            UserEmail = userEmailResult.Success ? userEmailResult.Value : "";
+            IsAuthenticated = !string.IsNullOrEmpty(result.Value);
+            isRendered = true;
+            StateHasChanged();
+        }
+    }
+}

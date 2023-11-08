@@ -1,5 +1,6 @@
 ﻿@using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
-@inject ProtectedSessionStorage ProtectedSessionStore
+@using BlazorServer.Helpers;
+@inject ProtectedSessionStorage SessionStore
 
 <div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
@@ -51,7 +52,7 @@
     {
         if (firstRender)
         {
-            var result = await ProtectedSessionStore.GetAsync<string>("userEmail");
+            var result = await SessionStore.GetAsync<string>(ChatConstants.UserEmail);
             userEmail = result.Success ? result.Value : "";
             StateHasChanged();
         }
