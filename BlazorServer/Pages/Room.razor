@@ -18,7 +18,7 @@
 else
 {
     <div class="container" style="max-width: 600px;">
-        <h3>Chat Room: Room ID 2003</h3>
+        <h3>Chat Room: @roomName</h3>
         <div class="message-list">
             @foreach (string message in messages)
             {
@@ -51,6 +51,7 @@ else
 @code {
     private HubConnection? hubConnection;
     private List<string> messages = new();
+    private string? roomName = "";
     private string? userEmail;
     private string? messageInput;
     private string? jwt;
@@ -74,7 +75,10 @@ else
 
         try
         {
-            var roomDto = await ChatService.JoinRoom(2003, jwt);
+            await ChatService.JoinRoom(2003);
+
+            var roomDto = await ChatService.GetRoom(2003);
+            roomName = roomDto.Name;
             if (roomDto?.Messages?.Any() == true)
             {
                 messages = roomDto.Messages

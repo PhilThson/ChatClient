@@ -24,8 +24,8 @@ builder.Services.AddHttpClient(ChatConstants.HttpChatClient, config =>
     config.Timeout = TimeSpan.FromSeconds(30);
     config.DefaultRequestHeaders.Clear();
     config.DefaultRequestHeaders.Add("Accept", "application/json");
-})
-.AddHttpMessageHandler<HttpClientMiddleware>();
+});
+//.AddHttpMessageHandler<HttpClientMiddleware>();
 
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<ChatService>();
