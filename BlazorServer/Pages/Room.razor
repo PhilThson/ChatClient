@@ -88,10 +88,27 @@ else
         }
         catch(HttpRequestException ex)
         {
-            await SessionStore.SetAsync(ChatConstants.WarningMessageName,
+            if (ex.StatusCode != System.Net.HttpStatusCode.Unauthorized)
+            {
+                await SessionStore.SetAsync(ChatConstants.WarningMessageName,
                 "There was a problem with connection to chat room. " + ex.Message);
-            NavManager.NavigateTo("/login");
-            return;
+                NavManager.NavigateTo("/login");
+                return;
+            }
+            try
+            {
+                await AuthService.RenewTokenAsync();
+            }
+            catch (Exception e)
+            {
+                await SessionStore.DeleteAsync(ChatConstants.JwtName);
+                await SessionStore.DeleteAsync(ChatConstants.RefreshTokenName);
+                await SessionStore.DeleteAsync(ChatConstants.UserEmail);
+                await SessionStore.SetAsync(ChatConstants.WarningMessageName,
+                "There was a problem with connection to chat room. " + e.Message);
+                NavManager.NavigateTo("/login");
+                return;
+            }
         }
 
         ConfigureHubConnection();
@@ -101,7 +118,7 @@ else
     private void ConfigureHubConnection()
     {
         hubConnection = new HubConnectionBuilder()
-            .WithUrl("https://localhost:7027/chathub", options =>
+            .WithUrl(ChatConstants.ChatBaseUrl + "chathub", options =>
             {
                 options.AccessTokenProvider = () => Task.FromResult(jwt);
             })
@@ -123,7 +140,7 @@ else
         }
         catch (HttpRequestException ex)
         {
-            if (ex.Message.Contains("401"))
+            if (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
             {
                 if (unauthenticatedCounter > 1)
                 {

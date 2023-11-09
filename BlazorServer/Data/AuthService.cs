@@ -30,7 +30,7 @@ namespace BlazorServer.Data
 
         public async Task RenewTokenAsync()
         {
-            var refreshTokenResult = await _sessionStore.GetAsync<string>("refreshToken");
+            var refreshTokenResult = await _sessionStore.GetAsync<string>(ChatConstants.RefreshTokenName);
             if (refreshTokenResult.Success)
             {
                 string refreshToken = refreshTokenResult.Value;
@@ -38,24 +38,16 @@ namespace BlazorServer.Data
                 var tokenRenewalResponse = await _httpClient.PostAsJsonAsync(
                     "refreshToken", new { Token = refreshToken });
 
-                if (tokenRenewalResponse.IsSuccessStatusCode)
+                tokenRenewalResponse.EnsureSuccessStatusCode();
+                var tokenRenewalContent = await tokenRenewalResponse.Content.ReadFromJsonAsync<AuthResponse>();
+                if (tokenRenewalContent != null && !string.IsNullOrEmpty(tokenRenewalContent.JwtToken))
                 {
-                    var tokenRenewalContent = await tokenRenewalResponse.Content.ReadFromJsonAsync<AuthResponse>();
-                    if (tokenRenewalContent != null && !string.IsNullOrEmpty(tokenRenewalContent.JwtToken))
-                    {
-                        await _sessionStore.SetAsync(ChatConstants.JwtName, tokenRenewalContent.JwtToken);
-                        await _sessionStore.SetAsync(ChatConstants.RefreshTokenName, tokenRenewalContent.RefreshToken);
-                    }
-                    else
-                    {
-                        // Handle the case where token renewal was not successful
-                        // Redirect to login?
-                    }
+                    await _sessionStore.SetAsync(ChatConstants.JwtName, tokenRenewalContent.JwtToken);
+                    await _sessionStore.SetAsync(ChatConstants.RefreshTokenName, tokenRenewalContent.RefreshToken);
                 }
                 else
                 {
-                    // Handle the case where the token renewal request was not successful
-                    // Redirect to login / errorMessage
+                    throw new ArgumentNullException(nameof(tokenRenewalContent));
                 }
             }
         }

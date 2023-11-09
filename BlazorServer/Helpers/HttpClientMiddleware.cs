@@ -15,12 +15,12 @@ namespace BlazorServer.Helpers
             HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
+            //can't use sessionStore in here
             //var result = await _sessionStore.GetAsync<string>(ChatConstants.JwtName);
             //var jwt = result.Success ? result.Value : "";
 
             //if (!string.IsNullOrEmpty(jwt))
             //    request.Headers.Add("Authorization", "Bearer " + jwt);
-            _ = request;
 
             return await base.SendAsync(request, cancellationToken);
         }

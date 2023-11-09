@@ -1,5 +1,4 @@
 ﻿using Microsoft.AspNetCore.ResponseCompression;
-using BlazorServer.Hubs;
 using BlazorServer.Data;
 using BlazorServer.Helpers;
 
@@ -19,7 +18,7 @@ builder.Services.AddHttpClient(ChatConstants.HttpAuthClient, config =>
 });
 builder.Services.AddHttpClient(ChatConstants.HttpChatClient, config =>
 {
-    config.BaseAddress = new Uri(ChatConstants.ChatBaseUrl);
+    config.BaseAddress = new Uri(ChatConstants.ChatBaseUrl + "api/");
 
     config.Timeout = TimeSpan.FromSeconds(30);
     config.DefaultRequestHeaders.Clear();
@@ -36,7 +35,7 @@ builder.Services.AddCors(options =>
     options.AddDefaultPolicy(
         builder =>
         {
-            //wg dokumentacji jest to wymagane zeby podlaczyc zewnetrznych klientow
+            //needed to connect clients
             builder.WithOrigins("http://localhost:5000")
                 .AllowAnyHeader()
                 .WithMethods("GET", "POST")
@@ -68,8 +67,6 @@ app.UseStaticFiles();
 app.UseRouting();
 
 app.MapBlazorHub();
-
-app.MapHub<ChatHub>("/chathub");
 
 app.MapFallbackToPage("/_Host");
 

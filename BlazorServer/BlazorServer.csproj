@@ -14,12 +14,10 @@
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="7.0.3" />
   </ItemGroup>
   <ItemGroup>
-    <None Remove="Hubs\" />
     <None Remove="Helpers\" />
     <None Remove="Data\DTOs\" />
   </ItemGroup>
   <ItemGroup>
-    <Folder Include="Hubs\" />
     <Folder Include="Helpers\" />
     <Folder Include="Data\DTOs\" />
   </ItemGroup>
