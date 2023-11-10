@@ -1,0 +1,194 @@
+﻿@page "/room"
+@using Microsoft.AspNetCore.SignalR.Client
+@using BlazorServer.Data;
+@using BlazorServer.Helpers;
+@using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
+@inject NavigationManager NavManager
+@inject ProtectedSessionStorage SessionStore
+@inject AuthService AuthService
+@inject ChatService ChatService
+@implements IAsyncDisposable
+
+<PageTitle>Room</PageTitle>
+
+@if (string.IsNullOrEmpty(jwt))
+{
+    <p>Loading...</p>
+}
+else
+{
+    <div class="container" style="max-width: 600px;">
+        <h3>Chat Room: @roomName</h3>
+        <div class="message-list">
+            @foreach (string message in messages)
+            {
+                <div class="message @(message.StartsWith("System:") ? "italic" : "")">
+                    @if (message.StartsWith("System:"))
+                    {
+                        @message
+                    }
+                    else
+                    {
+                        <strong>@message.Substring(0, message.IndexOf(":") + 1)</strong>@message.Substring(message.IndexOf(":") + 1)
+                    }
+                </div>
+            }
+        </div>
+
+        <div class="input-group">
+            <input class="form-control" @bind="messageInput" placeholder="Type your message..." />
+            <div class="input-group-append">
+                <button class="btn btn-primary"
+                        @onclick="Send"
+                        disabled="@(IsConnected == false)">
+                    Send
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private HubConnection? hubConnection;
+    private List<string> messages = new();
+    private string? roomName = "";
+    private string? userEmail;
+    private string? messageInput;
+    private string? jwt;
+    private int unauthenticatedCounter = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var result = await SessionStore.GetAsync<string>(ChatConstants.JwtName);
+        jwt = result.Success ? result.Value : "";
+        var userEmailResult = await SessionStore.GetAsync<string>(ChatConstants.UserEmail);
+        userEmail = userEmailResult.Success ? userEmailResult.Value : "";
+
+        if (string.IsNullOrEmpty(jwt))
+        {
+            await SessionStore.SetAsync(ChatConstants.WarningMessageName,
+                "Only authenticated users can use chat");
+
+            NavManager.NavigateTo("/login");
+            return;
+        }
+
+        try
+        {
+            await ChatService.JoinRoom(2003);
+
+            var roomDto = await ChatService.GetRoom(2003);
+            roomName = roomDto.Name;
+            if (roomDto?.Messages?.Any() == true)
+            {
+                messages = roomDto.Messages
+                    .Select(m => $"User (id: {m.SenderId}): {m.Content}")
+                    .ToList();
+            }
+        }
+        catch(HttpRequestException ex)
+        {
+            if (ex.StatusCode != System.Net.HttpStatusCode.Unauthorized)
+            {
+                await SessionStore.SetAsync(ChatConstants.WarningMessageName,
+                "There was a problem with connection to chat room. " + ex.Message);
+                NavManager.NavigateTo("/login");
+                return;
+            }
+            try
+            {
+                await AuthService.RenewTokenAsync();
+            }
+            catch (Exception e)
+            {
+                await SessionStore.DeleteAsync(ChatConstants.JwtName);
+                await SessionStore.DeleteAsync(ChatConstants.RefreshTokenName);
+                await SessionStore.DeleteAsync(ChatConstants.UserEmail);
+                await SessionStore.SetAsync(ChatConstants.WarningMessageName,
+                "There was a problem with connection to chat room. " + e.Message);
+                NavManager.NavigateTo("/login");
+                return;
+            }
+        }
+
+        ConfigureHubConnection();
+        await StartHubConnection();
+    }
+
+    private void ConfigureHubConnection()
+    {
+        hubConnection = new HubConnectionBuilder()
+            .WithUrl(ChatConstants.ChatBaseUrl + "chathub", options =>
+            {
+                options.AccessTokenProvider = () => Task.FromResult(jwt);
+            })
+            .WithAutomaticReconnect()
+            .Build();
+
+        hubConnection.On<MessageDto>("ReceiveMessage", (message) =>
+        {
+            messages.Add($"{message.Username}: {message.Content}");
+            InvokeAsync(StateHasChanged);
+        });
+    }
+
+    private async Task StartHubConnection()
+    {
+        try
+        {
+            await hubConnection.StartAsync();
+        }
+        catch (HttpRequestException ex)
+        {
+            if (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                if (unauthenticatedCounter > 1)
+                {
+                    await SessionStore.SetAsync(ChatConstants.WarningMessageName,
+                        "There was a problem with connection to chat. Please log in again.");
+                    NavManager.NavigateTo("/login");
+                }
+                unauthenticatedCounter++;
+                await AuthService.RenewTokenAsync();
+                var renewedResult = await SessionStore.GetAsync<string>(ChatConstants.JwtName);
+                jwt = renewedResult.Success ? renewedResult.Value : jwt;
+                ConfigureHubConnection();
+                await StartHubConnection();
+            }
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && hubConnection != null)
+        {
+            await hubConnection.StartAsync();
+        }
+    }
+
+    private async Task Send()
+    {
+        if (hubConnection is not null && hubConnection.State == HubConnectionState.Connected)
+        {
+            await hubConnection.SendAsync("SendMessage",
+                new MessageDto
+                {
+                    RoomId = 2003,
+                    Username = userEmail,
+                    Content = messageInput
+                });
+            messageInput = "";
+        }
+    }
+
+    public bool IsConnected => hubConnection?.State == HubConnectionState.Connected;
+
+
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection is not null)
+        {
+            await hubConnection.DisposeAsync();
+        }
+    }
+}
